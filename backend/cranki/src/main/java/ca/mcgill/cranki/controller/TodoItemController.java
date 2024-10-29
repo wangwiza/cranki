@@ -2,15 +2,16 @@ package ca.mcgill.cranki.controller;
 
 import ca.mcgill.cranki.dto.TodoItemDto;
 import ca.mcgill.cranki.model.TodoItem;
+import ca.mcgill.cranki.model.TodoList;
 import ca.mcgill.cranki.repository.TodoItemRepository;
+import ca.mcgill.cranki.repository.TodoListRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @CrossOrigin(origins = "*")
 @RestController
@@ -18,6 +19,33 @@ public class TodoItemController {
 
     @Autowired
     private TodoItemRepository todoItemRepository;
+
+    @Autowired
+    private TodoListRepository todoListRepository;
+
+    @PostMapping(value = {"/todoLists/{todoListName}", "/todoLists/{todoListName}/"})
+    public ResponseEntity<Object> createTodoItem(@RequestBody TodoItemDto todoItem, @PathVariable(name = "todoListName") String todoListName) {
+        String name = todoItem.getName();
+        String description = todoItem.getDescription();
+        TodoList todoList = todoListRepository.getByName(todoListName);
+
+        if (name == null || name.trim().isEmpty()) {
+            return new ResponseEntity<>("Cannot create todo with empty name", HttpStatus.BAD_REQUEST);
+        }
+        if (todoList == null) {
+            return new ResponseEntity<>("The todo list does not exist", HttpStatus.BAD_REQUEST);
+        }
+
+        TodoItem newItem = new TodoItem();
+        newItem.setName(name);
+        newItem.setDescription(description);
+        newItem.setStatus(TodoItem.TodoStatus.NOT_DONE);
+        newItem.setTodoList(todoList);
+        todoItemRepository.save(newItem);
+
+        TodoItemDto createdTodoItemDto = new TodoItemDto(newItem);
+        return new ResponseEntity<>(createdTodoItemDto, HttpStatus.CREATED);
+    }
 
     @PutMapping(value = { "/todoItem/updateStatus", "/todoItem/updateStatus/" })
     public ResponseEntity<String> updateTodoStatus(

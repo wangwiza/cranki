@@ -1,17 +1,11 @@
-import { useEffect, useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./components/ui/table";
+import {useEffect, useState} from "react";
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "./components/ui/table";
 
 // Define the shape of a single todo item
 interface TodoItem {
   id: number;
   name: string;
+  description: string;
   status: "NOT_DONE" | "DONE" | "IN_PROGRESS";
 }
 
@@ -22,6 +16,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [editedName, setEditedName] = useState("");
+  const [newTodo, setNewTodo] = useState({ name: "", description: "" });
 
   useEffect(() => {
     // Fetch multiple todo items
@@ -40,6 +35,32 @@ function App() {
 
     fetchTodos();
   }, []);
+
+  // Handle adding a new todo item
+  // Currently assumes that there is a todo list called 'Tasks'
+  const handleAddTodo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("http://localhost:8080/todoLists/Tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newTodo),
+      });
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      const createdTodo: TodoItem = await response.json();
+      setTodos((prev) => [...prev, createdTodo]);
+      setNewTodo({ name: "", description: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create todo");
+    }
+  };
 
   // Handle name edit submission
   const handleNameSubmit = async (id: number) => {
@@ -160,6 +181,33 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="container mx-auto py-10 px-4 max-w-4xl">
+        {/* Add Todo Form */}
+        <form onSubmit={handleAddTodo} className="mb-6">
+          <div className="flex justify-center gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Name"
+              value={newTodo.name}
+              onChange={(e) => setNewTodo({ ...newTodo, name: e.target.value })}
+              className="px-3 py-2 border rounded-md"
+              required
+            />
+            <input
+              type="text"
+              placeholder="Description"
+              value={newTodo.description}
+              onChange={(e) => setNewTodo({ ...newTodo, description: e.target.value })}
+              className="px-3 py-2 border rounded-md"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+            >
+              Add Todo
+            </button>
+          </div>
+        </form>
+        {/* Todo Item List*/}
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
             Todo Items
