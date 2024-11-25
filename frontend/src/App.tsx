@@ -1,5 +1,6 @@
 import {useEffect, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "./components/ui/table";
+import TodoDetailView from "./components/TodoDetailView"; // Import the detail view component
 
 // Define the shape of a single todo item
 interface TodoItem {
@@ -17,6 +18,7 @@ function App() {
   const [isEditing, setIsEditing] = useState<number | null>(null);
   const [editedName, setEditedName] = useState("");
   const [newTodo, setNewTodo] = useState({ name: "", description: "" });
+  const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null); // New state for selected todo
 
   useEffect(() => {
     // Fetch multiple todo items
@@ -224,29 +226,30 @@ function App() {
               </TableHeader>
               <TableBody>
                 {todos.map((todo) => (
-                  <TableRow key={todo.id}>
-                    <TableCell className="text-center">{todo.id}</TableCell>
-                    <TableCell
-                      className="text-center cursor-pointer hover:bg-gray-50"
-                      onClick={() => {
-                        setIsEditing(todo.id);
-                        setEditedName(todo.name);
-                      }}
-                    >
-                      {isEditing === todo.id ? (
-                        <input
-                          type="text"
-                          value={editedName}
-                          onChange={(e) => setEditedName(e.target.value)}
-                          onKeyDown={(e) => handleKeyPress(e, todo.id)}
-                          onBlur={() => handleNameSubmit(todo.id)}
-                          className="w-full px-2 py-1 text-center border rounded"
-                          autoFocus
-                        />
-                      ) : (
-                        <span className="hover:text-blue-600">{todo.name}</span>
-                      )}
-                    </TableCell>
+                  <TableRow key={todo.id} className="cursor-pointer" onClick={() => setSelectedTodo(todo)}>
+                  <TableCell className="text-center">{todo.id}</TableCell>
+                  <TableCell
+                    className="text-center cursor-pointer hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent row click from opening detail view
+                      setIsEditing(todo.id);
+                      setEditedName(todo.name);
+                    }}
+                  >
+                    {isEditing === todo.id ? (
+                      <input
+                        type="text"
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        onKeyDown={(e) => handleKeyPress(e, todo.id)}
+                        onBlur={() => handleNameSubmit(todo.id)}
+                        className="w-full px-2 py-1 text-center border rounded"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="hover:text-blue-600">{todo.name}</span>
+                    )}
+                  </TableCell>
                     <TableCell className="text-center">
                       <span
                         className={`px-3 py-1 rounded-full text-sm ${
@@ -262,7 +265,10 @@ function App() {
                     </TableCell>
                     <TableCell className="text-center">
                       <button
-                        onClick={() => toggleStatus(todo.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleStatus(todo.id);
+                        }}
                         className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors"
                       >
                         Toggle Status
@@ -270,7 +276,10 @@ function App() {
                     </TableCell>
                     <TableCell className="text-center">
                       <button
-                        onClick={() => handleDelete(todo.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(todo.id);
+                        }}
                         className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors"
                       >
                         Delete
@@ -283,6 +292,46 @@ function App() {
           </div>
         </div>
       </div>
+      {selectedTodo && (
+        <div className="fixed inset-0 bg-white z-50 flex items-center justify-center">
+          <div className="p-8 bg-gray-100 shadow-lg rounded-lg text-center w-3/4 max-w-2xl">
+            <button
+              onClick={() => setSelectedTodo(null)}
+              className="text-red-500 hover:text-red-700 text-lg mb-6"
+            >
+              Close
+            </button>
+            <div className="text-3xl font-bold mb-4">Todo Details</div>
+            <div className="text-lg">
+              <p className="mb-4">
+                <strong>ID:</strong> {selectedTodo.id}
+              </p>
+              <p className="mb-4">
+                <strong>Name:</strong> {selectedTodo.name}
+              </p>
+              <p className="mb-4">
+                <strong>Status:</strong>{" "}
+                <span
+                  className={`px-3 py-1 rounded-full text-sm ${
+                    selectedTodo.status === "DONE"
+                      ? "bg-green-100 text-green-800"
+                      : selectedTodo.status === "IN_PROGRESS"
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {selectedTodo.status}
+                </span>
+              </p>
+              <p className="mb-4">
+                <strong>Description:</strong> {selectedTodo.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
