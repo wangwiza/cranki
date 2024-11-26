@@ -26,17 +26,37 @@ import {
 } from "@dnd-kit/sortable";
 
 // Define the shape of a single todo item
+interface PropertyValue {
+  id: number;
+  value: string;
+  propertyId: number;
+}
+
+interface TodoItemSpecificPropertyValues {
+  id: number;
+  name: string;
+  type: string;
+  values: PropertyValue[];
+}
+
 interface TodoItem {
   id: number;
   name: string;
   description: string;
   status: "NOT_DONE" | "DONE" | "IN_PROGRESS";
   priority: "LOW" | "MEDIUM" | "HIGH";
+  propertyValues: TodoItemSpecificPropertyValues[];
+}
+
+interface Property {
+  id: number;
+  name: string;
 }
 
 function App() {
   // State for multiple todo items
   const [todos, setTodos] = useState<TodoItem[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]); // State for properties
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<number | null>(null);
@@ -53,6 +73,30 @@ function App() {
   const [editedDescription, setEditedDescription] = useState("");
 
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null); // New state for selected todo
+  const [newProperty, setNewProperty] = useState({ name: "", type: "LITERAL" });
+  const [editingProperty, setEditingProperty] = useState<{ todoId: number, propertyId: number } | null>(null);
+  const [editedPropertyValue, setEditedPropertyValue] = useState("");
+
+  // Fetch properties for the todo list
+  const fetchProperties = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/todolist/Tasks/properties");
+      if (!response.ok) throw new Error("Failed to fetch property IDs");
+      const propertyIds: number[] = await response.json();
+
+      const propertyPromises = propertyIds.map(async (id) => {
+        const propertyResponse = await fetch(`http://localhost:8080/property/${id}`);
+        if (!propertyResponse.ok) throw new Error("Failed to fetch property");
+        return propertyResponse.json();
+      });
+
+      const propertiesData: Property[] = await Promise.all(propertyPromises);
+      console.log(propertiesData);
+      setProperties(propertiesData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch properties");
+    }
+  };
 
   // State for filtering
   const [filterProperty, setFilterProperty] = useState<string>("literalPropertyValue");
@@ -81,6 +125,7 @@ function App() {
     };
 
     fetchTodos();
+    fetchProperties();
   }, [sortDirection]);
 
   // Handle filtering
@@ -131,6 +176,35 @@ function App() {
       setNewTodo({ name: "", description: "", priority: "MEDIUM" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create todo");
+    }
+  };
+
+  // Function to handle adding a new property
+  const handleAddProperty = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/property", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newProperty.name,
+          type: newProperty.type,
+          todoListId: 4, // Assuming the todo list ID is 1, change as needed
+          values: [] // Add values field if needed
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      // Refresh properties after adding new property
+      fetchProperties();
+      setNewProperty({ name: "", type: "LITERAL" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create property");
     }
   };
 
@@ -211,8 +285,8 @@ function App() {
       todo.status === "NOT_DONE"
         ? "IN_PROGRESS"
         : todo.status === "IN_PROGRESS"
-        ? "DONE"
-        : "NOT_DONE";
+          ? "DONE"
+          : "NOT_DONE";
 
     try {
       const response = await fetch(
@@ -342,6 +416,52 @@ function App() {
     }
   };
 
+  // Function to handle property value submission
+  const handlePropertyValueSubmit = async (todoId: number, propertyId: number, value: string) => {
+    try {
+      const response = await fetch(`http://localhost:8080/todoItem/${todoId}/properties/value`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          propertyId: propertyId,
+          type: "LITERAL", // Assuming type is LITERAL, adjust as needed
+          valueId: null,
+          value: value,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      // Fetch the updated todo item
+      const updatedTodoResponse = await fetch(`http://localhost:8080/todoItem/${todoId}`);
+      if (!updatedTodoResponse.ok) {
+        const errorText = await updatedTodoResponse.text();
+        throw new Error(errorText);
+      }
+      const updatedTodo: TodoItem = await updatedTodoResponse.json();
+
+      // Update local state with the updated todo item
+      setTodos((prev) =>
+        prev.map((todo) => (todo.id === todoId ? updatedTodo : todo))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update property value");
+    }
+  };
+
+  const handlePropertyKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, todoId: number, propertyId: number) => {
+    if (e.key === "Enter") {
+      handlePropertyValueSubmit(todoId, propertyId, e.currentTarget.value);
+    } else if (e.key === "Escape") {
+      // Handle escape key if needed
+    }
+  };
+
   // Loading, error, and empty states for multiple todos
   if (isLoading)
     return (
@@ -436,6 +556,36 @@ function App() {
             </button>
           </div>
         </form>
+
+        {/* Add Property Form */}
+        <div className="mb-6">
+          <div className="flex justify-center gap-4 mb-4">
+            <input
+              type="text"
+              placeholder="Property Name"
+              value={newProperty.name}
+              onChange={(e) => setNewProperty({ ...newProperty, name: e.target.value })}
+              className="px-3 py-2 border rounded-md"
+              required
+            />
+            <select
+              value={newProperty.type}
+              onChange={(e) => setNewProperty({ ...newProperty, type: e.target.value })}
+              className="px-3 py-2 border rounded-md"
+            >
+              <option value="LITERAL">Literal</option>
+              <option value="MULTISELECT">MultiSelect</option>
+              <option value="SINGLE_SELECT">Single Select</option>
+            </select>
+            <button
+              onClick={handleAddProperty}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+            >
+              Add Property
+            </button>
+          </div>
+        </div>
+
         {/* Filter Form */}
         <form onSubmit={handleFilter} className="mb-6">
           <div className="flex justify-center gap-4 mb-4">
@@ -476,6 +626,9 @@ function App() {
                   <TableHead className="text-center">ID</TableHead>
                   <TableHead className="text-center">Name</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  {properties.map((property) => (
+                    <TableHead key={property.id} className="text-center">{property.name}</TableHead>
+                  ))}
                   <TableHead className="text-center">
                     <div className="flex items-center justify-center gap-2">
                       Priority
@@ -484,9 +637,8 @@ function App() {
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={toggleSort}
-                        title={`Sort by priority ${
-                          sortDirection === "asc" ? "descending" : "ascending"
-                        }`}
+                        title={`Sort by priority ${sortDirection === "asc" ? "descending" : "ascending"
+                          }`}
                       >
                         <ChevronsUpDown className="h-4 w-4" />
                       </Button>
@@ -511,6 +663,8 @@ function App() {
                       <TodoItem
                         key={todo.id}
                         {...todo}
+                        properties={properties}
+                        propertyValues={todo.propertyValues}
                         isEditing={isEditing === todo.id}
                         editedName={editedName}
                         onStatusToggle={() => toggleStatus(todo.id)}
@@ -525,7 +679,8 @@ function App() {
                         onNameChange={setEditedName}
                         onNameSubmit={() => handleNameSubmit(todo.id)}
                         onKeyPress={(e) => handleKeyPress(e, todo.id, "name")}
-                        onRowClick={() => setSelectedTodo(todo)}
+                        onPropertyValueSubmit={handlePropertyValueSubmit}
+                        onPropertyKeyPress={handlePropertyKeyPress}
                       />
                     ))}
                   </SortableContext>
@@ -569,13 +724,12 @@ function App() {
               <p>
                 <strong>Status:</strong>{" "}
                 <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    selectedTodo.status === "DONE"
-                      ? "bg-green-100 text-green-800"
-                      : selectedTodo.status === "IN_PROGRESS"
+                  className={`px-3 py-1 rounded-full text-sm ${selectedTodo.status === "DONE"
+                    ? "bg-green-100 text-green-800"
+                    : selectedTodo.status === "IN_PROGRESS"
                       ? "bg-yellow-100 text-yellow-800"
                       : "bg-gray-100 text-gray-800"
-                  }`}
+                    }`}
                 >
                   {selectedTodo.status}
                 </span>
@@ -631,13 +785,12 @@ function App() {
               <p>
                 <strong>Priority:</strong>{" "}
                 <span
-                  className={`px-3 py-1 rounded-full text-sm ${
-                    selectedTodo.priority === "HIGH"
-                      ? "bg-red-100 text-red-800"
-                      : selectedTodo.priority === "MEDIUM"
+                  className={`px-3 py-1 rounded-full text-sm ${selectedTodo.priority === "HIGH"
+                    ? "bg-red-100 text-red-800"
+                    : selectedTodo.priority === "MEDIUM"
                       ? "bg-yellow-100 text-yellow-800"
                       : "bg-green-100 text-green-800"
-                  }`}
+                    }`}
                 >
                   {selectedTodo.priority}
                 </span>
